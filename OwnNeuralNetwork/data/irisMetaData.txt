@@ -1,0 +1,8 @@
+targetColumn,4
+firstLineToRead,1
+numberOfLines,151
+numberOfDataSets,150
+activeFeature0,0
+activeFeature1,1
+activeFeature2,2
+activeFeature3,3
