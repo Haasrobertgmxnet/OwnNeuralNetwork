@@ -2,6 +2,7 @@
 #include <cmath>
 #include <algorithm>
 #include <random>
+#include <chrono> // für Zeitmessung
 #include <Eigen/Dense>
 
 #include "getcsvcontent.h"
@@ -157,6 +158,9 @@ private:
 
 int main()
 {
+    // Start der Zeitmessung
+    auto start = std::chrono::high_resolution_clock::now();
+
     std::vector<std::vector<std::string>> content = getCsvContent(CsvDataFileName);
 
     DataTableMetaData dataTableMetaData;
@@ -175,7 +179,7 @@ int main()
     //std::cout << "nn.wih =\n" << nn.getWInputHidden() << std::endl;
     //std::cout << "nn.who =\n" << nn.getWHiddenOutput() << std::endl;
 
-    size_t epochs = 200;
+    size_t epochs = 800;
 
     for (size_t epoch = 0; epoch < epochs; ++epoch) {
         for (size_t j = 0; j < trainDataTable.getFilteredData().size(); ++j) {
@@ -186,7 +190,8 @@ int main()
         }
     }
 
-
+    auto corr_predictions = 0.0;
+    size_t total_prdictions = 0;
     for (size_t j = 0; j < testDataTable.getFilteredData().size(); ++j) {
         vector_type inputs = Helpers::ConvFunc(testDataTable.getFilteredData()[j]);
         vector_type targets = Helpers::getEncoding(testDataTable.getTargets()[j]);
@@ -194,12 +199,34 @@ int main()
         // scaling needed!
         vector_type y = nn.query(inputs);
 
+        // round to next int
+        Eigen::VectorXd rounded_y = y.unaryExpr([](double v) { return std::round(v); });
+        Eigen::VectorXd rounded_t = targets.unaryExpr([](double v) { return std::round(v); });
+
+        auto dotProduct = rounded_t.dot(rounded_y);
+        corr_predictions += dotProduct;
+
         std::cout << "y: " << std::endl;
-        std::cout << y;
-        std::cout << " y - target: " << std::endl;
-        std::cout << y - targets << std::endl;
+        std::cout << rounded_y << std::endl;
+        std::cout << "targets: " << std::endl;
+        std::cout << rounded_t << std::endl;
+        std::cout << "dotProduct: ";
+        std::cout << dotProduct << std::endl;
         std::cout << std::endl;
+        ++total_prdictions;
     }
 
-    return 4711;
+    std::cout << "Correct predictions: " << corr_predictions << " of " << total_prdictions << std::endl;
+    std::cout << "Score: " << corr_predictions/ total_prdictions << std::endl;
+
+    // Endzeitpunkt erfassen
+    auto end = std::chrono::high_resolution_clock::now();
+
+    // Differenz berechnen
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    // Ergebnis ausgeben
+    std::cout << "Die Berechnung hat " << duration.count() << " Millisekunden gedauert.\n";
+
+    return 0;
 }
