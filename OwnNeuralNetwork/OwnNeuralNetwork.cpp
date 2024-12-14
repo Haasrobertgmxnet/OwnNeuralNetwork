@@ -16,10 +16,12 @@
 using decimal = float;
 using vector_type = Eigen::VectorXf;
 using matrix_type = Eigen::MatrixXf;
+constexpr decimal decimal_eps = FLT_EPSILON;
 #else
 using decimal = double;
 using vector_type = Eigen::VectorXd;
 using matrix_type = Eigen::MatrixXd;
+constexpr decimal decimal_eps = DBL_EPSILON;
 #endif
 
 
@@ -96,6 +98,17 @@ namespace Helpers {
             corr_predictions += dotProduct;
         }
         return corr_predictions;
+    }
+
+    decimal getAccuracy(const std::vector<vector_type>& targets, const std::vector<vector_type>& predicted_targets) {
+        // round to next int
+
+        if (targets.size() != predicted_targets.size())
+        {
+            return -1.0;
+        }
+
+        return static_cast<decimal>(getCorrectPredictions(targets, predicted_targets)) / static_cast<decimal>(targets.size());
     }
 }
 
@@ -197,35 +210,32 @@ int main()
     DataTable testDataTable = dataTable.getTestDataTable();
 
     auto nn = NeuralNetwork(4, 4, 3, 0.12);
+    auto nn_ws = nn;
     //std::cout << "nn.wih =\n" << nn.getWInputHidden() << std::endl;
     //std::cout << "nn.who =\n" << nn.getWHiddenOutput() << std::endl;
 
     size_t test_data_size = testDataTable.getFilteredData().size();
-    size_t epochs = 1600;
+    size_t epochs = 500;
+
+    const uint8_t patience_const = 10;
+    uint8_t patience = patience_const;
 
     for (size_t epoch = 0; epoch < epochs; ++epoch) {
         for (size_t j = 0; j < trainDataTable.getFilteredData().size(); ++j) {
             vector_type train_inputs = Helpers::ConvFunc(trainDataTable.getFilteredData()[j]);
             vector_type train_targets = Helpers::getEncoding(trainDataTable.getTargets()[j]);
             // scaling needed!
-            nn.train(train_inputs, train_targets);
-
+            nn_ws.train(train_inputs, train_targets);
         }
 
         std::vector<vector_type> vector_predicted_test_targets(test_data_size);
-        std::vector<vector_type> vector_test_targets(test_data_size);
-
-        vector_predicted_test_targets.resize(test_data_size);
-        vector_test_targets.resize(test_data_size);
-
-        const size_t buf_size = 2;
-        decimal accuracies[buf_size];
+        std::vector<vector_type> vector_test_targets(test_data_size);      
 
         for (size_t j = 0; j < test_data_size; ++j) {
             vector_type test_inputs = Helpers::ConvFunc(testDataTable.getFilteredData()[j]);
             vector_type test_targets = Helpers::getEncoding(testDataTable.getTargets()[j]);
 
-            vector_type predicted_test_targets = nn.query(test_inputs);
+            vector_type predicted_test_targets = nn_ws.query(test_inputs);
 
             // round to next int
             predicted_test_targets = predicted_test_targets.unaryExpr([](double v) { return std::round(v); });
@@ -236,19 +246,40 @@ int main()
 
         }
 
+        const size_t buf_size = 2;
+        decimal accuracy = -1.0;
+        decimal accuracies[buf_size];
+
         auto corr_predictions = Helpers::getCorrectPredictions(vector_test_targets, vector_predicted_test_targets);
-        auto accuracy = static_cast<decimal>(corr_predictions) / static_cast<decimal>(test_data_size);
-        accuracies[epoch % buf_size] = accuracy;
+        auto current_accuracy = Helpers::getAccuracy(vector_test_targets, vector_predicted_test_targets);
+
+        // Output section
+        {
+            std::cout << "Epoch: " << epoch << std::endl;
+            std::cout << "Correct Predictions: " << corr_predictions << " out of " << test_data_size << std::endl;
+            std::cout << "Accuracy: " << current_accuracy << std::endl;
+            std::cout << std::endl;
+        }
         
-        std::cout << "Epoch: " << epoch << std::endl;
-        std::cout << (epoch - 1) % buf_size << std::endl;
-        std::cout << "Correct Predictions: " << corr_predictions << " out of " << test_data_size << std::endl;
-        std::cout << "Accuracy: " << accuracy << std::endl;
-        std::cout << std::endl;
-        if (epoch < epochs/2) {
+        if (current_accuracy + decimal_eps >= 1.0) {
+            patience = patience_const;
+            accuracy = current_accuracy;
+            nn = nn_ws;
+            break;
+        }
+
+        bool is_accuracy_better = epoch == 0 || current_accuracy >= accuracy;
+
+        if (is_accuracy_better) {
+            patience = patience_const;
+            accuracy = current_accuracy;
+            nn = nn_ws;
             continue;
         }
-        if (accuracies[epoch % buf_size] < accuracies[(epoch - 1) % buf_size]) {
+
+        // The emergency exit/ early stopping
+        --patience;
+        if (patience == 0) {
             break;
         }
     }
