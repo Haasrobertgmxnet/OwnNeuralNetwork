@@ -38,5 +38,11 @@
     <ClInclude Include="feature_filter.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
+    <ClInclude Include="nn_defs.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="helpers.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

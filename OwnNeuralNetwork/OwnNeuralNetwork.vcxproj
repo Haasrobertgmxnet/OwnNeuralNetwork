@@ -137,7 +137,9 @@
     <ClInclude Include="data_table.h" />
     <ClInclude Include="feature_filter.h" />
     <ClInclude Include="getcsvcontent.h" />
+    <ClInclude Include="helpers.h" />
     <ClInclude Include="metadata.h" />
+    <ClInclude Include="nn_defs.h" />
     <ClInclude Include="splitter.h" />
     <ClInclude Include="target_filter.h" />
   </ItemGroup>

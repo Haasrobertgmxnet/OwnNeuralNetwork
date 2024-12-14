@@ -25,7 +25,6 @@ struct DataTable {
 public:
 
     DataTable() {
-
     }
 
     void setMetaData(const DataTableMetaData& _metaData) {
@@ -42,9 +41,12 @@ public:
 
     void testTrainSplit(size_t _idcs) {
         splitter.reset(filteredData.size());
-        auto tn = getTargetNames();
         splitter.pickIdcsRandomly(_idcs, getTargetNames().size());
         splitter.removeIdcs();
+    }
+
+    Splitter getSplitter() {
+        return splitter;
     }
 
     std::vector <std::vector<std::string>> getTrainFeatureData() {
