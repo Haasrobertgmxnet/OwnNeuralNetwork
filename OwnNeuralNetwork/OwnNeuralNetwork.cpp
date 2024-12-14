@@ -78,6 +78,25 @@ namespace Helpers {
         }
         return res;
     }
+
+    size_t getCorrectPredictions(const std::vector<vector_type>& targets, const std::vector<vector_type>& predicted_targets) {
+        // round to next int
+
+        if (targets.size() != predicted_targets.size())
+        {
+            return SIZE_MAX;
+        }
+
+        size_t corr_predictions = 0;
+        for (auto it = targets.begin(), it1=predicted_targets.begin(); it != targets.end(); ++it, ++it1) {
+            Eigen::VectorXd rounded_it = it->unaryExpr([](double v) { return std::round(v); });
+            Eigen::VectorXd rounded_it1 = it1->unaryExpr([](double v) { return std::round(v); });
+
+            auto dotProduct = rounded_it.dot(rounded_it1);
+            corr_predictions += dotProduct;
+        }
+        return corr_predictions;
+    }
 }
 
 class NeuralNetwork {
@@ -145,6 +164,8 @@ public:
     matrix_type getWHiddenOutput() const {
         return wHiddenOutput;
     }
+
+// Methode für die accuracy
 private:
     size_t inputNodes = 0;
     size_t hiddenNodes = 0;
@@ -179,45 +200,58 @@ int main()
     //std::cout << "nn.wih =\n" << nn.getWInputHidden() << std::endl;
     //std::cout << "nn.who =\n" << nn.getWHiddenOutput() << std::endl;
 
-    size_t epochs = 800;
+    size_t test_data_size = testDataTable.getFilteredData().size();
+    size_t epochs = 1600;
 
     for (size_t epoch = 0; epoch < epochs; ++epoch) {
         for (size_t j = 0; j < trainDataTable.getFilteredData().size(); ++j) {
-            vector_type inputs = Helpers::ConvFunc(trainDataTable.getFilteredData()[j]);
-            vector_type targets = Helpers::getEncoding(trainDataTable.getTargets()[j]);
+            vector_type train_inputs = Helpers::ConvFunc(trainDataTable.getFilteredData()[j]);
+            vector_type train_targets = Helpers::getEncoding(trainDataTable.getTargets()[j]);
             // scaling needed!
-            nn.train(inputs, targets);
+            nn.train(train_inputs, train_targets);
+
+        }
+
+        std::vector<vector_type> vector_predicted_test_targets(test_data_size);
+        std::vector<vector_type> vector_test_targets(test_data_size);
+
+        vector_predicted_test_targets.resize(test_data_size);
+        vector_test_targets.resize(test_data_size);
+
+        const size_t buf_size = 2;
+        decimal accuracies[buf_size];
+
+        for (size_t j = 0; j < test_data_size; ++j) {
+            vector_type test_inputs = Helpers::ConvFunc(testDataTable.getFilteredData()[j]);
+            vector_type test_targets = Helpers::getEncoding(testDataTable.getTargets()[j]);
+
+            vector_type predicted_test_targets = nn.query(test_inputs);
+
+            // round to next int
+            predicted_test_targets = predicted_test_targets.unaryExpr([](double v) { return std::round(v); });
+            test_targets = test_targets.unaryExpr([](double v) { return std::round(v); });
+
+            vector_predicted_test_targets[j] = predicted_test_targets;
+            vector_test_targets[j] = test_targets;
+
+        }
+
+        auto corr_predictions = Helpers::getCorrectPredictions(vector_test_targets, vector_predicted_test_targets);
+        auto accuracy = static_cast<decimal>(corr_predictions) / static_cast<decimal>(test_data_size);
+        accuracies[epoch % buf_size] = accuracy;
+        
+        std::cout << "Epoch: " << epoch << std::endl;
+        std::cout << (epoch - 1) % buf_size << std::endl;
+        std::cout << "Correct Predictions: " << corr_predictions << " out of " << test_data_size << std::endl;
+        std::cout << "Accuracy: " << accuracy << std::endl;
+        std::cout << std::endl;
+        if (epoch < epochs/2) {
+            continue;
+        }
+        if (accuracies[epoch % buf_size] < accuracies[(epoch - 1) % buf_size]) {
+            break;
         }
     }
-
-    auto corr_predictions = 0.0;
-    size_t total_prdictions = 0;
-    for (size_t j = 0; j < testDataTable.getFilteredData().size(); ++j) {
-        vector_type inputs = Helpers::ConvFunc(testDataTable.getFilteredData()[j]);
-        vector_type targets = Helpers::getEncoding(testDataTable.getTargets()[j]);
-
-        // scaling needed!
-        vector_type y = nn.query(inputs);
-
-        // round to next int
-        Eigen::VectorXd rounded_y = y.unaryExpr([](double v) { return std::round(v); });
-        Eigen::VectorXd rounded_t = targets.unaryExpr([](double v) { return std::round(v); });
-
-        auto dotProduct = rounded_t.dot(rounded_y);
-        corr_predictions += dotProduct;
-
-        std::cout << "y: " << std::endl;
-        std::cout << rounded_y << std::endl;
-        std::cout << "targets: " << std::endl;
-        std::cout << rounded_t << std::endl;
-        std::cout << "dotProduct: ";
-        std::cout << dotProduct << std::endl;
-        std::cout << std::endl;
-        ++total_prdictions;
-    }
-
-    std::cout << "Correct predictions: " << corr_predictions << " of " << total_prdictions << std::endl;
-    std::cout << "Score: " << corr_predictions/ total_prdictions << std::endl;
 
     // Endzeitpunkt erfassen
     auto end = std::chrono::high_resolution_clock::now();
