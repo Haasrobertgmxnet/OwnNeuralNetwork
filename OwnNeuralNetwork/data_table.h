@@ -13,6 +13,9 @@
 #include "target_filter.h"
 #include "feature_filter.h"
 
+#include "nn_defs.h"
+#include "helpers.h"
+
 template<typename T>
 T getTrainData(const T& _data, const std::vector<size_t>& _idcs) {
     T resData;
@@ -21,93 +24,106 @@ T getTrainData(const T& _data, const std::vector<size_t>& _idcs) {
     return resData;
 }
 
-struct DataTable {
-public:
+namespace DataTable {
+    class DataTable {
 
-    DataTable() {
-    }
+    public:
+        DataTable() {
+        }
 
-    void setMetaData(const DataTableMetaData& _metaData) {
-        metaData = _metaData;
-    }
+        void setMetaData(const DataTableMetaData& _metaData) {
+            metaData = _metaData;
+        }
 
-    void setData(const std::vector<std::vector<std::string>>& _rawData) {
-        FeatureFilter featureFilter;
-        std::vector<std::vector<std::string>>::const_iterator it = _rawData.cbegin();
-        std::advance(it, metaData.getFirstLineToRead());
-        filteredData = featureFilter.applyFilter(it, _rawData.cend());
-        targets = TargetFilter::applyFilter(it, _rawData.cend(), metaData.getTargetColumn());
-    }
+        void setNumericData(const std::vector<std::vector<decimal>>& _numericData) {
+            numericData = _numericData;
+        }
 
-    void testTrainSplit(size_t _idcs) {
-        splitter.reset(filteredData.size());
-        splitter.pickIdcsRandomly(_idcs, getTargetNames().size());
-        splitter.removeIdcs();
-    }
+        void setTargets(const std::vector<std::string>& _targets) {
+            targets = _targets;
+        }
 
-    Splitter getSplitter() {
-        return splitter;
-    }
+		std::vector<std::vector<decimal>> getNumericData() const {
+			return numericData;
+		}
 
-    std::vector <std::vector<std::string>> getTrainFeatureData() {
-        return getTrainData<std::vector < std::vector<std::string>>>(filteredData, splitter.getIdcs().first);
-    }
+		std::vector<std::string> getTargets() const {
+			return targets;
+		}
 
-    std::vector <std::vector<std::string>> getTestFeatureData() {
-        return getTrainData<std::vector < std::vector<std::string>>>(filteredData, splitter.getIdcs().second);
-    }
+        void setData(const std::vector<std::vector<std::string>>& _rawData) {
+            FeatureFilter<std::string> featureFilter;
+            std::vector<std::vector<std::string>>::const_iterator it = _rawData.cbegin();
+            std::advance(it, metaData.getFirstLineToRead());
+            RawData rawData;
+            rawData.setFilteredData(featureFilter.applyFilter(it, _rawData.cend()));
+            numericData = rawData.transformData();
+            targets = TargetFilter::applyFilter(it, _rawData.cend(), metaData.getTargetColumn());
+        }
 
-    std::vector<std::string> getTrainTargetData() {
-        return getTrainData<std::vector<std::string>>(targets, splitter.getIdcs().first);
-    }
+        void testTrainSplit(size_t _idcs) {
+            splitter.reset(numericData.size());
+            splitter.pickIdcsRandomly(_idcs, getTargetNames().size());
+            splitter.removeIdcs();
+        }
 
-    std::vector<std::string> getTestTargetData() {
-        return getTrainData<std::vector<std::string>>(targets, splitter.getIdcs().second);
-    }
+        std::vector<std::string> getTargetNames() {
+            std::vector<std::string> res = {};
+            std::for_each(targets.begin(), targets.end(), [&res](std::string _x) {if (!std::count(res.begin(), res.end(), _x)) res.push_back(_x); });
+            return res;
+        }
 
-    DataTable getTrainTestDataTable(const std::function< std::vector <std::vector<std::string>>()>& _getFeatureData,
-        const std::function< std::vector<std::string>()>& _getTargetData) {
-        DataTable tData;
+        size_t getNumberOfDatasets() const {
+			return numericData.size();
+        }
+
+        DataTable getTrainDataTable(Splitter splitter) {
+            DataTable res;
+			res.setMetaData(metaData);
+			res.setNumericData(getTrainData<std::vector <std::vector<decimal>>>(numericData, splitter.getIdcs().first));
+            res.setTargets(getTrainData<std::vector<std::string>>(targets, splitter.getIdcs().first));
+            return res;
+        };
+
+        DataTable getTestDataTable(Splitter splitter) {
+            DataTable res;
+            res.setMetaData(metaData);
+            res.setNumericData(getTrainData<std::vector <std::vector<decimal>>>(numericData, splitter.getIdcs().second));
+            res.setTargets(getTrainData<std::vector<std::string>>(targets, splitter.getIdcs().second));
+            return res;
+        };
+
+    private:
         DataTableMetaData metaData;
-        metaData.firstLineToRead = 0;
-        tData.filteredData = _getFeatureData();
-        tData.targets = _getTargetData();
-        return tData;
-    }
+        Splitter splitter;
+        std::vector<std::vector<decimal>> numericData;
+        std::vector<std::string> targets;
 
-    DataTable getTrainDataTable() {
-        return getTrainTestDataTable([this]() {return getTrainFeatureData(); }, [this]() {return getTrainTargetData(); });
+        class RawData {
+        public:
+			RawData() {
+			}
+
+			void setFilteredData(const std::vector<std::vector<std::string>>& _filteredData) {
+				filteredData = _filteredData;
+			}
+
+            std::vector<std::vector<decimal>> transformData(std::function<decimal(const std::string&)> _convFunc = Helpers::convertElement) {
+                std::vector<std::vector<decimal>> res;
+                for (size_t j = 0; j < filteredData.size(); ++j) {
+                    std::vector<decimal> line;
+                    for (size_t k = 0; k < filteredData[j].size(); ++k) {
+                        line.push_back(_convFunc(filteredData[j][k]));
+                    }
+                    res.push_back(line);
+                }
+                return res;
+            }
+
+		private:
+            std::vector<std::vector<std::string>> filteredData;
+        };
+
     };
-
-    DataTable getTestDataTable() {
-        return getTrainTestDataTable([this]() {return getTestFeatureData(); }, [this]() {return getTestTargetData(); });
-    };
-
-    std::vector <std::vector<std::string>> getTiedData() {
-        // std::for_each(filteredData.begin(), filteredData.end(), [](std::vector<std::string >& _s) {std::cout << _s[0] << std::endl; });
-        std::vector <std::vector<std::string>> resData(filteredData.size());
-        std::transform(filteredData.begin(), filteredData.end(), targets.begin(), resData.begin(),
-            [](std::vector<std::string>& _a, std::string& _b) { _a.push_back(_b); return _a; /*std::cout << _b << std::endl; _a.push_back(_b);*/  });
-        return resData;
-    }
-
-    std::vector<std::string> getTargetNames() {
-        std::vector<std::string> res = {};
-        std::for_each(targets.begin(), targets.end(), [this, &res](std::string _x) {if (!std::count(res.begin(), res.end(), _x)) res.push_back(_x); });
-        return res;
-    }
-
-    std::vector<std::vector<std::string>> getFilteredData() const {
-        return filteredData;
-    }
-
-    std::vector<std::string> getTargets() const {
-        return targets;
-    }
-
-private:
-    DataTableMetaData metaData;
-    Splitter splitter;
-    std::vector<std::vector<std::string>> filteredData;
-    std::vector<std::string> targets;
 };
+

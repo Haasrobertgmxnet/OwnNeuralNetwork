@@ -23,6 +23,20 @@ namespace Helpers {
         return res;
     }
 
+	decimal convertElement(const std::string& _in) {
+		return std::stod(_in);
+	}
+
+    vector_type convertVectorElements(const std::vector<decimal>& _in) {
+        vector_type result(_in.size());
+
+        for (std::size_t i = 0; i < _in.size(); ++i) {
+            result[i] = _in[i];
+        }
+
+        return result;
+    }
+
     vector_type ConvFunc(const std::vector<std::string>& _in) {
         size_t siz = _in.size();
         vector_type res(siz);

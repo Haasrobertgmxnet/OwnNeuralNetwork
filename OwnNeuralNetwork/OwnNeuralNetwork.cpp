@@ -92,6 +92,11 @@ private:
     std::function<vector_type(vector_type)> activationFunction;
 };
 
+// method print(const std::string& s)
+// that prints s to the console
+void print(const std::string& s) {
+	std::cout << s << std::endl;
+}
 
 int main()
 {
@@ -105,28 +110,36 @@ int main()
     const size_t targetColumn = dataTableMetaData.getTargetColumn();
     const size_t firstLineToRead = dataTableMetaData.getFirstLineToRead();
 
-    DataTable dataTable;
+    DataTable::DataTable dataTable;
     dataTable.setMetaData(dataTableMetaData);
     dataTable.setData(content);
-    dataTable.testTrainSplit(30);
-    DataTable trainDataTable = dataTable.getTrainDataTable();
-    DataTable testDataTable = dataTable.getTestDataTable();
+
+    Splitter splitter;
+    splitter.reset(dataTable.getNumberOfDatasets());
+    splitter.pickIdcsRandomly(30, dataTable.getTargetNames().size());
+    splitter.removeIdcs();
+    
+    // dataTable.testTrainSplit(30);
+    DataTable::DataTable trainDataTable = dataTable.getTrainDataTable(splitter);
+    DataTable::DataTable testDataTable = dataTable.getTestDataTable(splitter);
 
     auto nn = NeuralNetwork(4, 4, 3, 0.12);
     auto nn_ws = nn;
     //std::cout << "nn.wih =\n" << nn.getWInputHidden() << std::endl;
     //std::cout << "nn.who =\n" << nn.getWHiddenOutput() << std::endl;
 
-    size_t test_data_size = testDataTable.getFilteredData().size();
-    size_t epochs = 50;
+    size_t test_data_size = testDataTable.getNumberOfDatasets();
+    size_t epochs = 10;
 
     const uint8_t patience_const = 10;
     uint8_t patience = patience_const;
 
+    // auto w = dataTable.transformData();
     for (size_t epoch = 0; epoch < epochs; ++epoch) {
-        for (size_t j = 0; j < trainDataTable.getFilteredData().size(); ++j) {
-            vector_type train_inputs = Helpers::ConvFunc(trainDataTable.getFilteredData()[j]);
+        for (size_t j = 0; j < trainDataTable.getNumberOfDatasets(); ++j) {
+            vector_type train_inputs = Helpers::convertVectorElements(trainDataTable.getNumericData()[j]);
             vector_type train_targets = Helpers::getEncoding(trainDataTable.getTargets()[j]);
+            // auto splitter = dataTable.getSplitter();
             // scaling needed!
             nn_ws.train(train_inputs, train_targets);
         }
@@ -135,7 +148,7 @@ int main()
         std::vector<vector_type> vector_test_targets(test_data_size);      
 
         for (size_t j = 0; j < test_data_size; ++j) {
-            vector_type test_inputs = Helpers::ConvFunc(testDataTable.getFilteredData()[j]);
+            vector_type test_inputs = Helpers::convertVectorElements(testDataTable.getNumericData()[j]);
             vector_type test_targets = Helpers::getEncoding(testDataTable.getTargets()[j]);
 
             vector_type predicted_test_targets = nn_ws.query(test_inputs);
