@@ -93,4 +93,53 @@ namespace Helpers {
 
         return static_cast<decimal>(getCorrectPredictions(targets, predicted_targets)) / static_cast<decimal>(targets.size());
     }
+
+	decimal getArithmeticMean(std::vector<decimal> _in) {
+		decimal sum = std::accumulate(_in.begin(), _in.end(), 0.0);
+		return sum / _in.size();
+	}
+
+    decimal getStandardDeviation(std::vector<decimal> _in) {
+        decimal mean = getArithmeticMean(_in);
+        decimal sum = std::accumulate(_in.begin(), _in.end(), 0.0, [mean](decimal _x, decimal _y) {return _x + (_y - mean) * (_y - mean); });
+        decimal variance = sum / (_in.size() - 1);
+        return std::sqrt(variance);
+    }
+
+	decimal getMedian(std::vector<decimal> _in) {
+		std::sort(_in.begin(), _in.end());
+		size_t siz = _in.size();
+		if (siz % 2 == 0) {
+			return (_in[siz / 2 - 1] + _in[siz / 2]) / 2.0;
+		}
+		return _in[siz / 2];
+	}
+
+	decimal getInterquartileRange(std::vector<decimal> _in) {
+		std::sort(_in.begin(), _in.end());
+		size_t siz = _in.size();
+		size_t q1 = siz / 4;
+		size_t q3 = siz * 3 / 4;
+		return _in[q3] - _in[q1];
+	}
+
+	std::vector<decimal> getStandardScaling(std::vector<decimal> _in, decimal _mean, decimal _sd) {
+        std::vector<decimal> res;
+        res.reserve(_in.size());
+		for (auto it = _in.cbegin(); it != _in.cend(); ++it) {
+			res.push_back((*it - _mean) / _sd);
+		}
+		return res;
+	}
+
+	std::vector<decimal> getRobustScaling(std::vector<decimal> _in, decimal _median, decimal _iqr) {
+        std::vector<decimal> res;
+        res.reserve(_in.size());
+		for (auto it = _in.cbegin(); it != _in.cend(); ++it) {
+			res.push_back((*it - _median) / _iqr);
+		}
+		return res;
+	}
+
+	// namespace Helpers
 }

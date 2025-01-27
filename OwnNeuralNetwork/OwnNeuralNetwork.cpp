@@ -123,18 +123,25 @@ int main()
     DataTable::DataTable trainDataTable = dataTable.getTrainDataTable(splitter);
     DataTable::DataTable testDataTable = dataTable.getTestDataTable(splitter);
 
+	for (auto feature : dataTable.getActiveFeatures()) {
+		print("Feature: " + std::to_string(feature));
+        auto w = trainDataTable.getNumericDataColumn(feature);
+		auto median = Helpers::getMedian(w);
+		auto iqr = Helpers::getInterquartileRange(w);
+        w = dataTable.getNumericDataColumn(feature);
+        w = Helpers::getRobustScaling(dataTable.getNumericDataColumn(feature), median, iqr);
+        dataTable.setNumericDataColumn(feature, w);
+	}
+
     auto nn = NeuralNetwork(4, 4, 3, 0.12);
     auto nn_ws = nn;
-    //std::cout << "nn.wih =\n" << nn.getWInputHidden() << std::endl;
-    //std::cout << "nn.who =\n" << nn.getWHiddenOutput() << std::endl;
 
     size_t test_data_size = testDataTable.getNumberOfDatasets();
-    size_t epochs = 10;
+    size_t epochs = 200;
 
     const uint8_t patience_const = 10;
     uint8_t patience = patience_const;
 
-    // auto w = dataTable.transformData();
     for (size_t epoch = 0; epoch < epochs; ++epoch) {
         for (size_t j = 0; j < trainDataTable.getNumberOfDatasets(); ++j) {
             vector_type train_inputs = Helpers::convertVectorElements(trainDataTable.getNumericData()[j]);

@@ -47,6 +47,30 @@ namespace DataTable {
 			return numericData;
 		}
 
+		std::vector<decimal> getNumericDataColumn(size_t _columnIndex) const {
+            std::vector<decimal> column;
+            for (const auto& row : numericData) {
+                if (_columnIndex < row.size()) {
+                    column.push_back(row[_columnIndex]);
+                }
+                else {
+                    throw std::out_of_range("Spaltenindex außerhalb des Bereichs");
+                }
+            }
+            return column;
+		}
+
+        void setNumericDataColumn(size_t columnIndex, const std::vector<decimal>& _newColumn) {
+            if (_newColumn.size() > numericData.size()) {
+                throw std::out_of_range("Die neue Spalte ist größer als die aktuelle Anzahl an Zeilen");
+            }
+
+            // Setze die Werte der neuen Spalte
+            for (size_t i = 0; i < _newColumn.size(); ++i) {
+                numericData[i][columnIndex] = _newColumn[i];
+            }
+        }
+
 		std::vector<std::string> getTargets() const {
 			return targets;
 		}
@@ -92,6 +116,10 @@ namespace DataTable {
             res.setTargets(getTrainData<std::vector<std::string>>(targets, splitter.getIdcs().second));
             return res;
         };
+
+		std::vector<size_t> getActiveFeatures() const {
+			return metaData.activeFeatures;
+		}
 
     private:
         DataTableMetaData metaData;
