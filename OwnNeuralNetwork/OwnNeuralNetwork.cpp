@@ -24,8 +24,8 @@ const auto execDir = fs::path("..\\Release\\");
 const auto execDirFallback = fs::path("..\\x64\\Release\\");
 #endif
 
-const std::string metaDataFileFullPath = "irisMetaData.txt";
-const std::string csvDataFileFullPath = "iris.csv";
+const auto metaDataFile = fs::path("irisMetaData.txt");
+const auto csvDataFile = fs::path("iris.csv");
 
 class NeuralNetwork {
 public:
@@ -115,11 +115,14 @@ int main()
     auto start = std::chrono::high_resolution_clock::now();
 
     std::filesystem::path cwd = fs::current_path();
-	std::filesystem::path metaDataFileFullPath = cwd / (std::filesystem::exists(execDir / metaDataFileFullPath) ? execDir : execDirFallback) / metaDataFileFullPath;
-	std::filesystem::path csvDataFileFullPath = cwd / (std::filesystem::exists(execDir / csvDataFileFullPath) ? execDir : execDirFallback) / csvDataFileFullPath;
+	std::filesystem::path metaDataFileFullPath = cwd / (std::filesystem::exists(execDir / metaDataFile) ? execDir : execDirFallback) / metaDataFile;
+	std::filesystem::path csvDataFileFullPath = cwd / (std::filesystem::exists(execDir / csvDataFile) ? execDir : execDirFallback) / csvDataFile;
 
     metaDataFileFullPath = std::filesystem::weakly_canonical(metaDataFileFullPath);
 	csvDataFileFullPath = std::filesystem::weakly_canonical(csvDataFileFullPath);
+
+    std::cout << "metaDataFileFullPath: " << metaDataFileFullPath << std::endl;
+	std::cout << "csvDataFileFullPath: " << csvDataFileFullPath << std::endl;
 
     if (!std::filesystem::exists(metaDataFileFullPath) || !std::filesystem::exists(csvDataFileFullPath)) {
 		std::cout << "Files not found" << std::endl;
@@ -130,8 +133,6 @@ int main()
 
     DataTableMetaData dataTableMetaData;
     dataTableMetaData.setMetaData(metaDataFileFullPath.string());
-    //const size_t targetColumn = dataTableMetaData.getTargetColumn();
-    //const size_t firstLineToRead = dataTableMetaData.getFirstLineToRead();
 
     DataTable::DataTable dataTable;
     dataTable.setMetaData(dataTableMetaData);
@@ -158,13 +159,9 @@ int main()
     auto nn = NeuralNetwork(4, 4, 3, 0.12);
     auto nn_ws = nn;
 
-    std::cout << "Aktuelles Arbeitsverzeichnis: " << std::filesystem::current_path() << std::endl;
     size_t test_data_size = testDataTable.getNumberOfDatasets();
-	std::cout << testDataTable.getNumberOfDatasets() << std::endl;
+	// std::cout << testDataTable.getNumberOfDatasets() << std::endl;
 
-	std::cout << "Press any key to start training" << std::endl;
-    char z;
-    std::cin >> z;
     size_t epochs = 250;
 
     const uint8_t patience_const = 10;
