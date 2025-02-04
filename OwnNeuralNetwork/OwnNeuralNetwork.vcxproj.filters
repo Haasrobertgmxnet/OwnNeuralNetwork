@@ -44,5 +44,17 @@
     <ClInclude Include="helpers.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
+    <ClInclude Include="resource.h">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="OwnNeuralNetwork.rc">
+      <Filter>Ressourcendateien</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CopyFileToFolders Include="data\iris.csv" />
+    <CopyFileToFolders Include="data\irisMetaData.txt" />
   </ItemGroup>
 </Project>

@@ -18,11 +18,6 @@ std::map<std::string, size_t> getMetaData(std::string _metaDataFile) {
 
 struct DataTableMetaData {
 public:
-    DataTableMetaData() = default;
-
-    //DataTableMetaData(const std::string& _file) {
-    //    setMetaData(_file);
-    //}
 
     size_t getTargetColumn() const {
         return targetColumn;

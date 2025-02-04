@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <random>
 #include <chrono> // für Zeitmessung
+#include <filesystem>
 #include <Eigen/Dense>
 
 #include "getcsvcontent.h"
@@ -13,8 +14,18 @@
 #include "nn_defs.h"
 #include "helpers.h"
 
-const std::string MetaDataFileName = ".\\data\\irisMetaData.txt";
-const std::string CsvDataFileName = ".\\data\\iris.csv";
+namespace fs = std::filesystem;
+
+#ifdef _DEBUG
+const auto execDir = fs::path("..\\Debug\\");
+const auto execDirFallback = fs::path("..\\x64\\Debug\\");
+#else
+const auto execDir = fs::path("..\\Release\\");
+const auto execDirFallback = fs::path("..\\x64\\Release\\");
+#endif
+
+const std::string metaDataFileFullPath = "irisMetaData.txt";
+const std::string csvDataFileFullPath = "iris.csv";
 
 class NeuralNetwork {
 public:
@@ -103,12 +114,24 @@ int main()
     // Start der Zeitmessung
     auto start = std::chrono::high_resolution_clock::now();
 
-    std::vector<std::vector<std::string>> content = getCsvContent(CsvDataFileName);
+    std::filesystem::path cwd = fs::current_path();
+	std::filesystem::path metaDataFileFullPath = cwd / (std::filesystem::exists(execDir / metaDataFileFullPath) ? execDir : execDirFallback) / metaDataFileFullPath;
+	std::filesystem::path csvDataFileFullPath = cwd / (std::filesystem::exists(execDir / csvDataFileFullPath) ? execDir : execDirFallback) / csvDataFileFullPath;
+
+    metaDataFileFullPath = std::filesystem::weakly_canonical(metaDataFileFullPath);
+	csvDataFileFullPath = std::filesystem::weakly_canonical(csvDataFileFullPath);
+
+    if (!std::filesystem::exists(metaDataFileFullPath) || !std::filesystem::exists(csvDataFileFullPath)) {
+		std::cout << "Files not found" << std::endl;
+		return 1;
+    }
+
+    std::vector<std::vector<std::string>> content = getCsvContent(csvDataFileFullPath.string());
 
     DataTableMetaData dataTableMetaData;
-    dataTableMetaData.setMetaData(MetaDataFileName);
-    const size_t targetColumn = dataTableMetaData.getTargetColumn();
-    const size_t firstLineToRead = dataTableMetaData.getFirstLineToRead();
+    dataTableMetaData.setMetaData(metaDataFileFullPath.string());
+    //const size_t targetColumn = dataTableMetaData.getTargetColumn();
+    //const size_t firstLineToRead = dataTableMetaData.getFirstLineToRead();
 
     DataTable::DataTable dataTable;
     dataTable.setMetaData(dataTableMetaData);
@@ -119,7 +142,6 @@ int main()
     splitter.pickIdcsRandomly(30, dataTable.getTargetNames().size());
     splitter.removeIdcs();
     
-    // dataTable.testTrainSplit(30);
     DataTable::DataTable trainDataTable = dataTable.getTrainDataTable(splitter);
     DataTable::DataTable testDataTable = dataTable.getTestDataTable(splitter);
 
@@ -136,8 +158,14 @@ int main()
     auto nn = NeuralNetwork(4, 4, 3, 0.12);
     auto nn_ws = nn;
 
+    std::cout << "Aktuelles Arbeitsverzeichnis: " << std::filesystem::current_path() << std::endl;
     size_t test_data_size = testDataTable.getNumberOfDatasets();
-    size_t epochs = 200;
+	std::cout << testDataTable.getNumberOfDatasets() << std::endl;
+
+	std::cout << "Press any key to start training" << std::endl;
+    char z;
+    std::cin >> z;
+    size_t epochs = 250;
 
     const uint8_t patience_const = 10;
     uint8_t patience = patience_const;
@@ -146,8 +174,6 @@ int main()
         for (size_t j = 0; j < trainDataTable.getNumberOfDatasets(); ++j) {
             vector_type train_inputs = Helpers::convertVectorElements(trainDataTable.getNumericData()[j]);
             vector_type train_targets = Helpers::getEncoding(trainDataTable.getTargets()[j]);
-            // auto splitter = dataTable.getSplitter();
-            // scaling needed!
             nn_ws.train(train_inputs, train_targets);
         }
 

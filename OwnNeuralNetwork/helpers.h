@@ -17,7 +17,7 @@ namespace Helpers {
     template<>
     vector_type sigmoidFunction(vector_type v) {
         vector_type res = v;
-        for (size_t j = 0; j < res.size(); ++j) {
+        for (auto j = 0; j < res.size(); ++j) {
             res(j) = sigmoidFunction<decimal>(v(j));
         }
         return res;
