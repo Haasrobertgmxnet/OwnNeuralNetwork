@@ -5,6 +5,7 @@
 #include <chrono> // für Zeitmessung
 #include <filesystem>
 #include <Eigen/Dense>
+#include <omp.h>
 
 #include "getcsvcontent.h"
 #include "metadata.h"
@@ -17,66 +18,72 @@
 namespace fs = std::filesystem;
 
 #ifdef _DEBUG
-const auto execDir = fs::path("..\\Debug\\");
-const auto execDirFallback = fs::path("..\\x64\\Debug\\");
+const fs::path execDir = fs::path("..\\Debug\\");
+const fs::path execDirFallback = fs::path("..\\x64\\Debug\\");
 #else
-const auto execDir = fs::path("..\\Release\\");
-const auto execDirFallback = fs::path("..\\x64\\Release\\");
+const fs::path execDir = fs::path("..\\Release\\");
+const fs::path execDirFallback = fs::path("..\\x64\\Release\\");
 #endif
 
-const auto metaDataFile = fs::path("irisMetaData.txt");
-const auto csvDataFile = fs::path("iris.csv");
+const fs::path metaDataFile = fs::path("irisMetaData.txt");
+const fs::path csvDataFile = fs::path("iris.csv");
 
 class NeuralNetwork {
 public:
-    NeuralNetwork(size_t _inputNodes, size_t _hiddenNodes, size_t _outputNodes, decimal _learningRate, std::function<vector_type(vector_type)> _activationFunction = Helpers::sigmoidFunction<vector_type>) :
-        inputNodes(_inputNodes),
-        hiddenNodes(_hiddenNodes),
-        outputNodes(_outputNodes),
-        learningRate(_learningRate),
-        activationFunction(_activationFunction)
+    NeuralNetwork(size_t _inputNodes, size_t _hiddenNodes, size_t _outputNodes, decimal _learningRate, 
+        std::function<vector_type(const vector_type&)> _activationHidden = Helpers::sigmoidFunction<vector_type>, 
+        std::function<vector_type(const vector_type&)> _activationOutput = Helpers::sigmoidFunction<vector_type>) :
+        inputNodes{ _inputNodes },
+        hiddenNodes{ _hiddenNodes },
+        outputNodes{ _outputNodes },
+        learningRate{ _learningRate },
+        activationHidden{ _activationHidden },
+        activationOutput{ _activationOutput }
     {
+        initializeWeights();
+    }
+
+    void initializeWeights() {
         // build wInputHidden and wHiddenOutput as random matrices with normally distributed entries
         std::random_device rd{};
         std::mt19937 gen{ rd() };
-
         std::normal_distribution<decimal> distWInputHidden(0.0f, std::pow(inputNodes, -0.5f));
         std::normal_distribution<decimal> distWHiddenOutput(0.0f, std::pow(hiddenNodes, -0.5f));
-
         wInputHidden = matrix_type::NullaryExpr(hiddenNodes, inputNodes, [&]() {return distWInputHidden(gen); });
         wHiddenOutput = matrix_type::NullaryExpr(outputNodes, hiddenNodes, [&]() {return distWHiddenOutput(gen); });
     }
-
-    vector_type query(vector_type _inputs) {
+    
+    [[nodiscard]] vector_type query(const vector_type& _inputs) {
         // calculate signals into hidden layer
-        auto hiddenInputs = wInputHidden * _inputs;
+        matrix_type hiddenInputs = wInputHidden * _inputs;
         // calculate the signals emerging from hidden layer
-        auto hiddenOutputs = activationFunction(hiddenInputs);
+        vector_type hiddenOutputs = activationHidden(hiddenInputs);
 
         // calculate signals into final output layer
-        auto finalInputs = wHiddenOutput * hiddenOutputs;
+        matrix_type finalInputs = wHiddenOutput * hiddenOutputs;
         // calculate the signals emerging from final output layer
-        auto finalOutputs = activationFunction(finalInputs);
+        vector_type finalOutputs = activationOutput(finalInputs);
 
-        return finalOutputs;
+        return std::move(finalOutputs);
     }
 
-    void train(vector_type _inputs, vector_type _targets) {
+    void train(const vector_type& _inputs, const vector_type& _targets) {
 
         // calculate signals into hidden layer
-        auto hiddenInputs = wInputHidden * _inputs;
+        matrix_type hiddenInputs = wInputHidden * _inputs;
         // calculate the signals emerging from hidden layer
-        auto hiddenOutputs = activationFunction(hiddenInputs);
+        vector_type hiddenOutputs = activationHidden(hiddenInputs);
 
         // calculate signals into final output layer
-        auto finalInputs = wHiddenOutput * hiddenOutputs;
+        matrix_type finalInputs = wHiddenOutput * hiddenOutputs;
         // calculate the signals emerging from final output layer
-        auto finalOutputs = activationFunction(finalInputs);
+        vector_type finalOutputs = activationHidden(finalInputs);
 
         // output layer error is the(target - actual)
-        auto outputErrors = _targets - finalOutputs;
+        matrix_type outputErrors = _targets - finalOutputs;
         // hidden layer error is the output_errors, split by weights, recombined at hidden nodes
-        auto hiddenErrors = wHiddenOutput.transpose() * outputErrors;
+		// auto hiddenErrors is of Eigen type: Eigen::MatrixXd
+        matrix_type hiddenErrors = wHiddenOutput.transpose() * outputErrors;
 
         // update the weights for the links between the hidden and output layers
         wHiddenOutput += learningRate * outputErrors.cwiseProduct(finalOutputs.cwiseProduct(vector_type::Constant(outputNodes, 1.0) - finalOutputs)) * hiddenOutputs.transpose();
@@ -85,11 +92,11 @@ public:
         wInputHidden += learningRate * hiddenErrors.cwiseProduct(hiddenOutputs.cwiseProduct(vector_type::Constant(hiddenNodes, 1.0) - hiddenOutputs)) * _inputs.transpose();
     }
 
-    matrix_type getWInputHidden() const {
+    [[nodiscard]] matrix_type getWInputHidden() const {
         return wInputHidden;
     }
 
-    matrix_type getWHiddenOutput() const {
+    [[nodiscard]] matrix_type getWHiddenOutput() const {
         return wHiddenOutput;
     }
 
@@ -100,7 +107,8 @@ private:
     decimal learningRate = 0.0;
     matrix_type wInputHidden;
     matrix_type wHiddenOutput;
-    std::function<vector_type(vector_type)> activationFunction;
+    std::function<vector_type(vector_type)> activationHidden;
+    std::function<vector_type(vector_type)> activationOutput;
 };
 
 // method print(const std::string& s)
@@ -109,22 +117,27 @@ void print(const std::string& s) {
 	std::cout << s << std::endl;
 }
 
+[[nodiscard]] fs::path resolveDataPath(const fs::path& file) {
+    return fs::weakly_canonical(fs::current_path() / (fs::exists(execDir / file) ? execDir : execDirFallback) / file);
+}
+
 int main()
 {
     // Start der Zeitmessung
     auto start = std::chrono::high_resolution_clock::now();
 
-    std::filesystem::path cwd = fs::current_path();
-	std::filesystem::path metaDataFileFullPath = cwd / (std::filesystem::exists(execDir / metaDataFile) ? execDir : execDirFallback) / metaDataFile;
-	std::filesystem::path csvDataFileFullPath = cwd / (std::filesystem::exists(execDir / csvDataFile) ? execDir : execDirFallback) / csvDataFile;
+    fs::path cwd = fs::current_path();
 
-    metaDataFileFullPath = std::filesystem::weakly_canonical(metaDataFileFullPath);
-	csvDataFileFullPath = std::filesystem::weakly_canonical(csvDataFileFullPath);
+
+    fs::path metaDataFileFullPath = resolveDataPath(metaDataFile);
+    fs::path csvDataFileFullPath = resolveDataPath(csvDataFile);
+
+
 
     std::cout << "metaDataFileFullPath: " << metaDataFileFullPath << std::endl;
 	std::cout << "csvDataFileFullPath: " << csvDataFileFullPath << std::endl;
 
-    if (!std::filesystem::exists(metaDataFileFullPath) || !std::filesystem::exists(csvDataFileFullPath)) {
+    if (!fs::exists(metaDataFileFullPath) || !fs::exists(csvDataFileFullPath)) {
 		std::cout << "Files not found" << std::endl;
 		return 1;
     }
@@ -192,12 +205,12 @@ int main()
 
         }
 
-        const size_t buf_size = 2;
-        decimal accuracy = -1.0;
-        decimal accuracies[buf_size];
+        // const size_t buf_size = 2;
+        // decimal accuracies[buf_size];
 
-        auto corr_predictions = Helpers::getCorrectPredictions(vector_test_targets, vector_predicted_test_targets);
-        auto current_accuracy = Helpers::getAccuracy(vector_test_targets, vector_predicted_test_targets);
+        decimal accuracy = -1.0;
+        size_t corr_predictions = Helpers::getCorrectPredictions(vector_test_targets, vector_predicted_test_targets);
+        decimal current_accuracy = Helpers::getAccuracy(vector_test_targets, vector_predicted_test_targets);
 
         // Output section
         {
